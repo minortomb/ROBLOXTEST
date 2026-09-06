@@ -10,7 +10,13 @@ local Players = game:GetService("Players")
 
 local PlayerDataService = {}
 
-local store = DataStoreService:GetDataStore("PlayerMeta_v1")
+local okStore, store = pcall(function()
+	return DataStoreService:GetDataStore("PlayerMeta_v1")
+end)
+if not okStore then
+	warn("PlayerDataService: DataStore unavailable (" .. tostring(store) .. "), running with in-memory progress only")
+	store = nil
+end
 local cache = {} -- [userId] = { MetaCurrency, AccountLevel, TotalXP }
 local warnedOnce = false
 
