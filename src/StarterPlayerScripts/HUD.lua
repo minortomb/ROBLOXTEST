@@ -245,10 +245,13 @@ function HUD.Init()
 	end)
 	updatePanelsForPhase(sessionState:GetAttribute("Phase"))
 
+	-- Countdown/Trade/GameOver banners are live countdowns driven off synced
+	-- server time in the Heartbeat loop below; these handlers only flip
+	-- visibility immediately and (for WaveStart, which isn't a countdown)
+	-- set the one-shot message text.
 	Remotes.GameStateChanged.OnClientEvent:Connect(function(kind, payload)
-		if kind == "Countdown" then
+		if kind == "Countdown" or kind == "TradeWindow" then
 			bannerLabel.Visible = true
-			bannerLabel.Text = string.format("Игра начнётся через %d сек.", payload.Seconds)
 		elseif kind == "WaveStart" then
 			bannerLabel.Visible = true
 			bannerLabel.Text = string.format("Волна %d из %d началась!", payload.Wave, payload.Total)
@@ -257,19 +260,10 @@ function HUD.Init()
 					bannerLabel.Visible = false
 				end
 			end)
-		elseif kind == "TradeWindow" then
-			bannerLabel.Visible = true
 		elseif kind == "GameOver" then
 			gameOverTitle.Text = payload.Won and "Победа!" or "Поражение"
 			gameOverTitle.TextColor3 = payload.Won and Color3.fromRGB(140, 230, 140)
 				or Color3.fromRGB(230, 90, 90)
-			local currency = LocalPlayer:GetAttribute("Currency") or 0
-			local xp = LocalPlayer:GetAttribute("SessionXP") or 0
-			gameOverDetails.Text = string.format(
-				"Заработано валюты за сессию: %d\nОпыт за сессию: %d\nВозврат в лобби через 10 секунд...",
-				currency,
-				xp
-			)
 		end
 	end)
 
@@ -321,11 +315,28 @@ function HUD.Init()
 		waveLabel.Text = string.format("Волна: %d/%d", currentWave, totalWaves)
 		zombiesLabel.Text = string.format("Осталось зомби: %d", sessionState:GetAttribute("ZombiesRemaining") or 0)
 
-		if sessionState:GetAttribute("Phase") == "Trade" then
+		local phase = sessionState:GetAttribute("Phase")
+		local now = workspace:GetServerTimeNow()
+
+		if phase == "Trade" then
 			local endsAt = sessionState:GetAttribute("TradeWindowEndsAt") or 0
-			local secondsLeft = math.max(0, math.ceil(endsAt - workspace:GetServerTimeNow()))
+			local secondsLeft = math.max(0, math.ceil(endsAt - now))
 			bannerLabel.Visible = true
 			bannerLabel.Text = string.format("Торговое окно: %d сек. до следующей волны", secondsLeft)
+		elseif phase == "Countdown" then
+			local endsAt = sessionState:GetAttribute("CountdownEndsAt") or 0
+			local secondsLeft = math.max(0, math.ceil(endsAt - now))
+			bannerLabel.Visible = true
+			bannerLabel.Text = string.format("Игра начнётся через %d сек.", secondsLeft)
+		elseif phase == "GameOver" then
+			local endsAt = sessionState:GetAttribute("GameOverReturnAt") or 0
+			local secondsLeft = math.max(0, math.ceil(endsAt - now))
+			gameOverDetails.Text = string.format(
+				"Заработано валюты за сессию: %d\nОпыт за сессию: %d\nВозврат в лобби через %d сек...",
+				LocalPlayer:GetAttribute("Currency") or 0,
+				LocalPlayer:GetAttribute("SessionXP") or 0,
+				secondsLeft
+			)
 		end
 	end)
 end

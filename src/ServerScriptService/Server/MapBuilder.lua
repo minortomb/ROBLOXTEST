@@ -11,9 +11,16 @@ local MapBuilder = {}
 
 local LOBBY_CENTER = Vector3.new(0, 0, 0)
 local ARENA_CENTER = Vector3.new(0, 0, 500)
-local ARENA_SIZE = Vector3.new(140, 0, 160) -- Y unused, kept for X/Z footprint math
+-- Gameplay layout (spawns/shops/pads/cover below) is unchanged from the
+-- first version; the footprint itself was enlarged so there is a generous
+-- buffer of solid ground between the play area and the map's hard edge -
+-- a chasing zombie (or a jumping one's velocity impulse) can no longer
+-- reach open air by wandering past the perimeter hills.
+local ARENA_SIZE = Vector3.new(220, 0, 240) -- Y unused, kept for X/Z footprint math
 local HALF_X, HALF_Z = ARENA_SIZE.X / 2, ARENA_SIZE.Z / 2
 local HILL_RADIUS = 14
+local GROUND_MARGIN = 60 -- solid ground beyond the hill line, before the hard boundary wall
+local BOUNDARY_WALL_HEIGHT = 100
 
 local function part(props)
 	local p = Instance.new("Part")
@@ -108,6 +115,29 @@ local function createBoulderCluster(position)
 	return model
 end
 
+-- Invisible, solid walls right at the outer edge of the ground slab. The
+-- hills alone are just gentle mounds (climbable), so this is the hard
+-- guarantee that nothing - a chasing zombie, a Jumper's velocity impulse,
+-- a player backing up - can ever walk or fly off the map into the void.
+local function buildBoundaryWalls(halfX, halfZ)
+	local function wallPart(size, position)
+		part({
+			Name = "BoundaryWall",
+			Size = size,
+			Position = position,
+			Transparency = 1,
+			Material = Enum.Material.SmoothPlastic,
+			Parent = workspace,
+		})
+	end
+
+	local midY = BOUNDARY_WALL_HEIGHT / 2 - 10
+	wallPart(Vector3.new(halfX * 2 + 4, BOUNDARY_WALL_HEIGHT, 4), ARENA_CENTER + Vector3.new(0, midY, -halfZ - 2))
+	wallPart(Vector3.new(halfX * 2 + 4, BOUNDARY_WALL_HEIGHT, 4), ARENA_CENTER + Vector3.new(0, midY, halfZ + 2))
+	wallPart(Vector3.new(4, BOUNDARY_WALL_HEIGHT, halfZ * 2 + 4), ARENA_CENTER + Vector3.new(-halfX - 2, midY, 0))
+	wallPart(Vector3.new(4, BOUNDARY_WALL_HEIGHT, halfZ * 2 + 4), ARENA_CENTER + Vector3.new(halfX + 2, midY, 0))
+end
+
 -- Places overlapping FillBall mounds along a line so the perimeter reads as
 -- a rolling hill instead of a hard wall, with gaps left wherever a segment
 -- simply isn't drawn (the zombie-lane openings).
@@ -168,9 +198,11 @@ function MapBuilder.BuildAll()
 	arenaFolder.Parent = workspace
 
 	local groundThickness = 8
+	local groundHalfX = HALF_X + HILL_RADIUS + GROUND_MARGIN
+	local groundHalfZ = HALF_Z + HILL_RADIUS + GROUND_MARGIN
 	workspace.Terrain:FillBlock(
 		CFrame.new(ARENA_CENTER + Vector3.new(0, -groundThickness / 2, 0)),
-		Vector3.new(ARENA_SIZE.X + 2 * HILL_RADIUS, groundThickness, ARENA_SIZE.Z + 2 * HILL_RADIUS),
+		Vector3.new(groundHalfX * 2, groundThickness, groundHalfZ * 2),
 		Enum.Material.Grass
 	)
 
@@ -184,6 +216,8 @@ function MapBuilder.BuildAll()
 	buildHillLine(Vector3.new(-HALF_X, 0, 10), Vector3.new(-HALF_X, 0, HALF_Z))
 	buildHillLine(Vector3.new(HALF_X, 0, -HALF_Z), Vector3.new(HALF_X, 0, -10))
 	buildHillLine(Vector3.new(HALF_X, 0, 10), Vector3.new(HALF_X, 0, HALF_Z))
+
+	buildBoundaryWalls(groundHalfX, groundHalfZ)
 
 	local keepClear = {}
 
@@ -329,17 +363,17 @@ function MapBuilder.BuildAll()
 	treesFolder.Name = "Trees"
 	treesFolder.Parent = arenaFolder
 
-	local treeAttempts, treesPlaced = 220, 0
+	local treeAttempts, treesPlaced, treeCap = 420, 0, 130
 	for _ = 1, treeAttempts do
-		local x = ARENA_CENTER.X + (math.random() - 0.5) * (ARENA_SIZE.X + HILL_RADIUS)
-		local z = ARENA_CENTER.Z + (math.random() - 0.5) * (ARENA_SIZE.Z + HILL_RADIUS)
+		local x = ARENA_CENTER.X + (math.random() - 0.5) * (ARENA_SIZE.X + 2 * HILL_RADIUS)
+		local z = ARENA_CENTER.Z + (math.random() - 0.5) * (ARENA_SIZE.Z + 2 * HILL_RADIUS)
 		if farEnoughFromAll(Vector3.new(x, 0, z), keepClear) then
 			local groundY = getGroundY(x, z)
 			local tree = createTree(Vector3.new(x, groundY, z))
 			tree.Parent = treesFolder
 			treesPlaced += 1
 		end
-		if treesPlaced >= 70 then
+		if treesPlaced >= treeCap then
 			break
 		end
 	end

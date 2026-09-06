@@ -23,6 +23,7 @@ local GameManager = {}
 local mapData = nil
 local sessionState = nil
 local startInProgress = false
+local GAME_OVER_DELAY = 10
 
 local function clearBackpackAndTools(player)
 	local backpack = player:FindFirstChildOfClass("Backpack")
@@ -160,6 +161,7 @@ end
 
 local function endSession(won, squad)
 	sessionState:SetAttribute("Phase", "GameOver")
+	sessionState:SetAttribute("GameOverReturnAt", workspace:GetServerTimeNow() + GAME_OVER_DELAY)
 	Remotes.GameStateChanged:FireAllClients("GameOver", { Won = won })
 
 	for _, player in ipairs(squad) do
@@ -170,7 +172,7 @@ local function endSession(won, squad)
 		end
 	end
 
-	task.wait(10)
+	task.wait(GAME_OVER_DELAY)
 	ZombieSpawner.ClearAll()
 
 	for _, player in ipairs(squad) do
@@ -195,6 +197,7 @@ local function runSession(difficulty)
 
 	sessionState:SetAttribute("Phase", "Countdown")
 	sessionState:SetAttribute("Difficulty", difficulty.Id)
+	sessionState:SetAttribute("CountdownEndsAt", workspace:GetServerTimeNow() + GameConfig.LobbyCountdownSeconds)
 	Remotes.GameStateChanged:FireAllClients("Countdown", { Seconds = GameConfig.LobbyCountdownSeconds })
 	task.wait(GameConfig.LobbyCountdownSeconds)
 
@@ -276,6 +279,8 @@ function GameManager.Init(builtMapData)
 	sessionState:SetAttribute("TotalWaves", GameConfig.TotalWaves)
 	sessionState:SetAttribute("ZombiesRemaining", 0)
 	sessionState:SetAttribute("TradeWindowEndsAt", 0)
+	sessionState:SetAttribute("CountdownEndsAt", 0)
+	sessionState:SetAttribute("GameOverReturnAt", 0)
 	sessionState:SetAttribute("Difficulty", "")
 	sessionState.Parent = game:GetService("ReplicatedStorage")
 
