@@ -5,7 +5,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local EVENT_NAMES = {
-	"RequestStartGame", -- client -> server: {difficultyId}
 	"FireWeapon", -- client -> server: {origin, direction, weaponId}
 	"RequestReload", -- client -> server: {weaponId}
 	"GameStateChanged", -- server -> client: {phase, payload}

@@ -1,4 +1,5 @@
--- Builds and drives all prototype UI: HUD, difficulty-select lobby panel,
+-- Builds and drives all prototype UI: the HUD bar, a lobby hint (actual
+-- difficulty selection happens via world portals - see MapBuilder.lua),
 -- trade-window/countdown banners, game-over summary and toast
 -- notifications. Everything is created at runtime with Instance.new so the
 -- project has no external UI assets to ship alongside the code.
@@ -91,75 +92,22 @@ function HUD.Init()
 	})
 
 	----------------------------------------------------------------
-	-- Lobby difficulty panel
+	-- Lobby hint (difficulty is chosen by walking into one of the
+	-- portals built in the lobby - see MapBuilder.lua)
 	----------------------------------------------------------------
-	local lobbyPanel = create("Frame", {
-		Name = "LobbyPanel",
-		Size = UDim2.new(0, 320, 0, 240),
-		Position = UDim2.new(0.5, -160, 0.5, -120),
-		BackgroundColor3 = Color3.fromRGB(20, 20, 28),
-		BackgroundTransparency = 0.1,
+	local lobbyHintLabel = create("TextLabel", {
+		Name = "LobbyHint",
+		Size = UDim2.new(0, 460, 0, 34),
+		Position = UDim2.new(0.5, -230, 1, -90),
+		BackgroundColor3 = Color3.fromRGB(15, 15, 20),
+		BackgroundTransparency = 0.3,
+		TextColor3 = Color3.fromRGB(255, 255, 255),
+		Font = Enum.Font.GothamBold,
+		TextSize = 16,
 		Visible = true,
+		Text = "Войдите в портал нужной сложности, чтобы начать игру",
 		Parent = screenGui,
 	})
-	create("UICorner", { CornerRadius = UDim.new(0, 10), Parent = lobbyPanel })
-
-	create("TextLabel", {
-		Size = UDim2.new(1, 0, 0, 36),
-		BackgroundTransparency = 1,
-		TextColor3 = Color3.fromRGB(255, 255, 255),
-		Font = Enum.Font.GothamBold,
-		TextSize = 20,
-		Text = "Выберите сложность",
-		Parent = lobbyPanel,
-	})
-
-	local selectedDifficulty = "Easy"
-	local difficultyButtons = {}
-
-	local function refreshDifficultyButtons()
-		for id, button in pairs(difficultyButtons) do
-			button.BackgroundColor3 = (id == selectedDifficulty) and Color3.fromRGB(60, 130, 200)
-				or Color3.fromRGB(45, 45, 55)
-		end
-	end
-
-	for i, difficulty in ipairs(GameConfig.Difficulties) do
-		local button = create("TextButton", {
-			Name = difficulty.Id,
-			Size = UDim2.new(1, -24, 0, 32),
-			Position = UDim2.new(0, 12, 0, 40 + (i - 1) * 38),
-			BackgroundColor3 = Color3.fromRGB(45, 45, 55),
-			TextColor3 = Color3.fromRGB(255, 255, 255),
-			Font = Enum.Font.Gotham,
-			TextSize = 16,
-			Text = difficulty.Name,
-			Parent = lobbyPanel,
-		})
-		create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = button })
-		difficultyButtons[difficulty.Id] = button
-		button.MouseButton1Click:Connect(function()
-			selectedDifficulty = difficulty.Id
-			refreshDifficultyButtons()
-		end)
-	end
-	refreshDifficultyButtons()
-
-	local startButton = create("TextButton", {
-		Name = "StartButton",
-		Size = UDim2.new(1, -24, 0, 36),
-		Position = UDim2.new(0, 12, 1, -46),
-		BackgroundColor3 = Color3.fromRGB(50, 170, 90),
-		TextColor3 = Color3.fromRGB(255, 255, 255),
-		Font = Enum.Font.GothamBold,
-		TextSize = 18,
-		Text = "Начать игру",
-		Parent = lobbyPanel,
-	})
-	create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = startButton })
-	startButton.MouseButton1Click:Connect(function()
-		Remotes.RequestStartGame:FireServer(selectedDifficulty)
-	end)
 
 	----------------------------------------------------------------
 	-- Game-over panel
@@ -233,7 +181,7 @@ function HUD.Init()
 	-- Phase-driven panel visibility
 	----------------------------------------------------------------
 	local function updatePanelsForPhase(phase)
-		lobbyPanel.Visible = (phase == "Lobby")
+		lobbyHintLabel.Visible = (phase == "Lobby")
 		gameOverPanel.Visible = (phase == "GameOver")
 		if phase ~= "Trade" and phase ~= "Countdown" then
 			bannerLabel.Visible = false

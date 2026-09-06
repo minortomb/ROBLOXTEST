@@ -115,6 +115,108 @@ local function createBoulderCluster(position)
 	return model
 end
 
+local DIFFICULTY_COLORS = {
+	Easy = Color3.fromRGB(70, 200, 90),
+	Medium = Color3.fromRGB(230, 195, 40),
+	Hard = Color3.fromRGB(230, 130, 30),
+	Extreme = Color3.fromRGB(220, 45, 45),
+}
+
+local function formatMultiplier(mult)
+	return string.format("x%.1f", mult)
+end
+
+local function formatCountMultiplier(mult)
+	local percent = math.floor((mult - 1) * 100 + 0.5)
+	if percent <= 0 then
+		return "база"
+	end
+	return string.format("+%d%%", percent)
+end
+
+-- One difficulty-select portal: an arch you walk through, with a floating
+-- label showing the name and the exact multipliers from GameConfig so the
+-- label can never drift out of sync with the actual numbers. Touching the
+-- glowing plane is wired up in GameManager.Init to start a run.
+local function buildDifficultyPortal(difficulty, position)
+	local color = DIFFICULTY_COLORS[difficulty.Id] or Color3.fromRGB(200, 200, 200)
+	local archHeight, archWidth = 10, 6
+
+	local model = Instance.new("Model")
+	model.Name = "Portal_" .. difficulty.Id
+
+	local function pillar(offsetX)
+		part({
+			Name = "Pillar",
+			Size = Vector3.new(1, archHeight, 1),
+			Position = position + Vector3.new(offsetX, archHeight / 2, 0),
+			Color = Color3.fromRGB(55, 55, 60),
+			Material = Enum.Material.Metal,
+			Parent = model,
+		})
+	end
+	pillar(-archWidth / 2)
+	pillar(archWidth / 2)
+
+	part({
+		Name = "Lintel",
+		Size = Vector3.new(archWidth + 1, 1, 1),
+		Position = position + Vector3.new(0, archHeight, 0),
+		Color = Color3.fromRGB(55, 55, 60),
+		Material = Enum.Material.Metal,
+		Parent = model,
+	})
+
+	local plane = part({
+		Name = "PortalPlane",
+		Size = Vector3.new(archWidth - 1, archHeight - 1, 0.3),
+		Position = position + Vector3.new(0, (archHeight - 1) / 2, 0),
+		Color = color,
+		Material = Enum.Material.ForceField,
+		Transparency = 0.35,
+		CanCollide = false,
+		Parent = model,
+	})
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "Label"
+	billboard.Size = UDim2.new(0, 240, 0, 64)
+	billboard.StudsOffset = Vector3.new(0, archHeight + 1.5, 0)
+	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = 120
+	billboard.Parent = plane
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, 0, 0, 30)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextSize = 22
+	nameLabel.TextColor3 = color
+	nameLabel.TextStrokeTransparency = 0.2
+	nameLabel.Text = difficulty.Name
+	nameLabel.Parent = billboard
+
+	local statsLabel = Instance.new("TextLabel")
+	statsLabel.Size = UDim2.new(1, 0, 0, 34)
+	statsLabel.Position = UDim2.new(0, 0, 0, 28)
+	statsLabel.BackgroundTransparency = 1
+	statsLabel.Font = Enum.Font.Gotham
+	statsLabel.TextSize = 14
+	statsLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	statsLabel.TextStrokeTransparency = 0.3
+	statsLabel.TextWrapped = true
+	statsLabel.Text = string.format(
+		"Здоровье зомби %s | Урон %s\nКол-во зомби %s | Награда %s",
+		formatMultiplier(difficulty.ZombieHealthMult),
+		formatMultiplier(difficulty.ZombieDamageMult),
+		formatCountMultiplier(difficulty.ZombieCountMult),
+		formatMultiplier(difficulty.RewardMult)
+	)
+	statsLabel.Parent = billboard
+
+	return model, plane
+end
+
 -- Invisible, solid walls right at the outer edge of the ground slab. The
 -- hills alone are just gentle mounds (climbable), so this is the hard
 -- guarantee that nothing - a chasing zombie, a Jumper's velocity impulse,
@@ -157,6 +259,7 @@ function MapBuilder.BuildAll()
 		ZombieSpawnPoints = {},
 		ShopStalls = {},
 		AmmoPads = {},
+		Portals = {},
 	}
 
 	----------------------------------------------------------------
@@ -178,14 +281,18 @@ function MapBuilder.BuildAll()
 	lobbyFloor.Material = Enum.Material.Concrete
 	lobbyFloor.Parent = lobbyFolder
 
-	part({
-		Name = "GameStartStation",
-		Size = Vector3.new(6, 4, 1),
-		Position = LOBBY_CENTER + Vector3.new(0, 1 + 2, -20),
-		Color = Color3.fromRGB(40, 130, 200),
-		Material = Enum.Material.Neon,
-		Parent = lobbyFolder,
-	})
+	-- Difficulty-select portals: one per GameConfig.Difficulties entry,
+	-- spaced out in a row facing the spawn point. Walking into a portal's
+	-- glowing plane starts a run at that difficulty (wired up in
+	-- GameManager.Init against the returned Portals list).
+	local portalSpacing = 12
+	local portalRowStartX = -(#GameConfig.Difficulties - 1) * portalSpacing / 2
+	for i, difficulty in ipairs(GameConfig.Difficulties) do
+		local position = LOBBY_CENTER + Vector3.new(portalRowStartX + (i - 1) * portalSpacing, 1, -25)
+		local portalModel, triggerPlane = buildDifficultyPortal(difficulty, position)
+		portalModel.Parent = lobbyFolder
+		table.insert(data.Portals, { DifficultyId = difficulty.Id, Part = triggerPlane })
+	end
 
 	data.LobbySpawnCFrame = CFrame.new(LOBBY_CENTER + Vector3.new(0, 3, 0))
 
@@ -381,7 +488,7 @@ function MapBuilder.BuildAll()
 	-- A few trees around the lobby too, purely cosmetic. The lobby floor's
 	-- top surface sits at y=1 (Size.Y=2 centered on LOBBY_CENTER.Y=0).
 	local lobbyFloorTopY = 1
-	for _, offset in ipairs({ Vector3.new(-25, 0, 10), Vector3.new(25, 0, 10), Vector3.new(-22, 0, -25), Vector3.new(22, 0, -25) }) do
+	for _, offset in ipairs({ Vector3.new(-25, 0, 10), Vector3.new(25, 0, 10), Vector3.new(-28, 0, -20), Vector3.new(28, 0, -20) }) do
 		local tree = createTree(LOBBY_CENTER + offset + Vector3.new(0, lobbyFloorTopY, 0))
 		tree.Parent = lobbyFolder
 	end

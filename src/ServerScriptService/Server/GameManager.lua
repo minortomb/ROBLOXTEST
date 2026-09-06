@@ -242,9 +242,15 @@ local function runSession(difficulty)
 	startInProgress = false
 end
 
-local function handleStartRequest(player, difficultyId)
+-- Triggered by a player's HumanoidRootPart touching a difficulty portal in
+-- the lobby (see MapBuilder's Portals). player is only used for the
+-- "already running" notification, not to restrict who may start the run -
+-- one server is one shared squad.
+local function tryStartSession(player, difficultyId)
 	if sessionState:GetAttribute("Phase") ~= "Lobby" then
-		Remotes.Notify:FireClient(player, "Сессия уже идёт, дождитесь следующей", "warning")
+		if player then
+			Remotes.Notify:FireClient(player, "Сессия уже идёт, дождитесь следующей", "warning")
+		end
 		return
 	end
 	if startInProgress then
@@ -253,6 +259,14 @@ local function handleStartRequest(player, difficultyId)
 	startInProgress = true
 	local difficulty = GameConfig.GetDifficulty(difficultyId)
 	task.spawn(runSession, difficulty)
+end
+
+local function onPortalTouched(difficultyId, hitPart)
+	local character = hitPart.Parent
+	local player = character and Players:GetPlayerFromCharacter(character)
+	if player then
+		tryStartSession(player, difficultyId)
+	end
 end
 
 local function onPlayerAdded(player)
@@ -284,7 +298,11 @@ function GameManager.Init(builtMapData)
 	sessionState:SetAttribute("Difficulty", "")
 	sessionState.Parent = game:GetService("ReplicatedStorage")
 
-	Remotes.RequestStartGame.OnServerEvent:Connect(handleStartRequest)
+	for _, portal in ipairs(mapData.Portals) do
+		portal.Part.Touched:Connect(function(hitPart)
+			onPortalTouched(portal.DifficultyId, hitPart)
+		end)
+	end
 
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	for _, player in ipairs(Players:GetPlayers()) do
